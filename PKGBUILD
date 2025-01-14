@@ -2,7 +2,7 @@
 
 pkgname=mani
 pkgver=0.30.0
-pkgrel=2
+pkgrel=3
 pkgdesc='A CLI tool that helps you manage multiple repositories'
 arch=('x86_64')
 url='https://manicli.com'
@@ -33,12 +33,16 @@ build() {
 package() {
   cd "$pkgname"
 
-  # binary
+  # Install the binary
   install -vDm755 -t "$pkgdir/usr/bin" dist/mani
 
-  # documentation
+  # Install documentation
   install -vDm644 -t "$pkgdir/usr/share/doc/$pkgname" README.md
 
-  # license
+  # Install license
   install -vDm644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE
+
+  # Install and compress the man page
+  install -vDm644 "core/mani.1" "$pkgdir/usr/share/man/man1/mani.1"
+  gzip "$pkgdir/usr/share/man/man1/mani.1"
 }
