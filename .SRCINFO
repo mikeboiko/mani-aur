@@ -1,6 +1,6 @@
 pkgbase = mani
 	pkgdesc = A CLI tool that helps you manage multiple repositories
-	pkgver = 0.31.1
+	pkgver = 0.32.0
 	pkgrel = 1
 	url = https://manicli.com
 	arch = x86_64
@@ -9,7 +9,7 @@ pkgbase = mani
 	makedepends = go
 	depends = glibc
 	options = !debug
-	source = mani::git+https://github.com/alajmo/mani.git#commit=71282770342550c56e7e6d6e58e439cc53683f98
+	source = mani::git+https://github.com/alajmo/mani.git#commit=75caa4ac6d31a0afb291e738ed5fb7624014cf6d
 	b2sums = SKIP
 
 pkgname = mani
