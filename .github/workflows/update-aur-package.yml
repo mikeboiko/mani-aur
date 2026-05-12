@@ -1,0 +1,132 @@
+name: Update AUR package
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      full_build:
+        description: "Run a full local package build before publishing"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-aur-package
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    defaults:
+      run:
+        shell: bash
+    env:
+      AUR_PACKAGE_NAME: mani
+      AUR_REMOTE: ssh://aur@aur.archlinux.org/mani.git
+      UPSTREAM_REPO: alajmo/mani
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install packaging tools
+        run: |
+          pacman -Syu --noconfirm --needed curl git go jq namcap openssh
+
+      - name: Prepare build user
+        run: |
+          if ! id builder >/dev/null 2>&1; then
+            useradd --create-home --shell /bin/bash builder
+          fi
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Update packaging files
+        id: update
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          runuser -u builder -- env \
+            GITHUB_TOKEN="$GITHUB_TOKEN" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            UPSTREAM_REPO="$UPSTREAM_REPO" \
+            bash -lc '
+              cd "$GITHUB_WORKSPACE"
+              ./scripts/update-upstream-release.sh
+            '
+
+          if git diff --quiet -- PKGBUILD .SRCINFO; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          pkgver="$(sed -n "s/^pkgver=//p" PKGBUILD | head -n 1)"
+          pkgrel="$(sed -n "s/^pkgrel=//p" PKGBUILD | head -n 1)"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+          echo "pkgrel=$pkgrel" >> "$GITHUB_OUTPUT"
+
+      - name: Validate packaging update
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.full_build }}" == "true" ]]; then
+            runuser -u builder -- env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash -lc '
+              cd "$GITHUB_WORKSPACE"
+              ./scripts/validate-package.sh --build
+            '
+          else
+            runuser -u builder -- env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash -lc '
+              cd "$GITHUB_WORKSPACE"
+              ./scripts/validate-package.sh
+            '
+          fi
+
+      - name: Commit update to GitHub mirror
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "chore: bump mani to ${{ steps.update.outputs.pkgver }}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Configure AUR SSH
+        if: steps.update.outputs.changed == 'true'
+        env:
+          AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [[ -z "${AUR_SSH_PRIVATE_KEY}" ]]; then
+            echo "::error::Missing AUR_SSH_PRIVATE_KEY secret"
+            exit 1
+          fi
+
+          install -d -m 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/aur
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          install -m 644 .github/aur-known_hosts ~/.ssh/known_hosts
+
+          cat > ~/.ssh/config <<'EOF'
+          Host aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/aur
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            UserKnownHostsFile ~/.ssh/known_hosts
+          EOF
+
+          chmod 600 ~/.ssh/config
+
+      - name: Publish package files to AUR
+        if: steps.update.outputs.changed == 'true'
+        env:
+          AUR_REMOTE: ${{ env.AUR_REMOTE }}
+        run: |
+          ./scripts/publish-aur-tree.sh PKGBUILD .SRCINFO
