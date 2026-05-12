@@ -98,16 +98,15 @@ jobs:
       - name: Commit update to GitHub mirror
         if: steps.update.outputs.changed == 'true'
         run: |
-          cd "$GITHUB_WORKSPACE"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
-          if git diff --cached --quiet; then
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$GITHUB_WORKSPACE" add PKGBUILD .SRCINFO
+          if git -C "$GITHUB_WORKSPACE" diff --cached --quiet; then
             echo "No GitHub mirror changes to commit."
             exit 0
           fi
-          git commit -m "chore: bump mani to ${{ steps.update.outputs.pkgver }}"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git -C "$GITHUB_WORKSPACE" commit -m "chore: bump mani to ${{ steps.update.outputs.pkgver }}"
+          git -C "$GITHUB_WORKSPACE" push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Configure AUR SSH
         if: steps.update.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish_current)
