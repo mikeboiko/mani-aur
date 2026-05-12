@@ -10,6 +10,11 @@ on:
         required: false
         type: boolean
         default: false
+      publish_current:
+        description: "Attempt the AUR publish step even if upstream is already current"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -63,19 +68,20 @@ jobs:
               ./scripts/update-upstream-release.sh
             '
 
+          pkgver="$(sed -n "s/^pkgver=//p" PKGBUILD | head -n 1)"
+          pkgrel="$(sed -n "s/^pkgrel=//p" PKGBUILD | head -n 1)"
+          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
+          echo "pkgrel=$pkgrel" >> "$GITHUB_OUTPUT"
+
           if git diff --quiet -- PKGBUILD .SRCINFO; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          pkgver="$(sed -n "s/^pkgver=//p" PKGBUILD | head -n 1)"
-          pkgrel="$(sed -n "s/^pkgrel=//p" PKGBUILD | head -n 1)"
           echo "changed=true" >> "$GITHUB_OUTPUT"
-          echo "pkgver=$pkgver" >> "$GITHUB_OUTPUT"
-          echo "pkgrel=$pkgrel" >> "$GITHUB_OUTPUT"
 
       - name: Validate packaging update
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.full_build)
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.full_build }}" == "true" ]]; then
             runuser -u builder -- env GITHUB_WORKSPACE="$GITHUB_WORKSPACE" bash -lc '
@@ -99,7 +105,7 @@ jobs:
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Configure AUR SSH
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish_current)
         env:
           AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
         run: |
@@ -125,7 +131,7 @@ jobs:
           chmod 600 ~/.ssh/config
 
       - name: Publish package files to AUR
-        if: steps.update.outputs.changed == 'true'
+        if: steps.update.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish_current)
         env:
           AUR_REMOTE: ${{ env.AUR_REMOTE }}
         run: |

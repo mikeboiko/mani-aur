@@ -42,7 +42,10 @@ The workflow uses the pinned host keys in `.github/aur-known_hosts`. If `aur.arc
 
 ## Workflow behavior
 
-The update workflow runs every 6 hours and through `workflow_dispatch`. Manual runs also expose a `full_build` input so the mirror can do a complete package build before publishing.
+The update workflow runs every 6 hours and through `workflow_dispatch`. Manual runs expose:
+
+- `full_build` to force a complete package build even when upstream is already current.
+- `publish_current` to attempt an AUR sync of the current `PKGBUILD` and `.SRCINFO` without waiting for a new upstream release.
 
 When a new upstream release is found, it:
 
@@ -54,6 +57,8 @@ When a new upstream release is found, it:
 6. Validates the package metadata with `makepkg`, `makepkg --verifysource`, and `namcap`.
 7. Commits the packaging update to the GitHub mirror.
 8. Pushes a clean AUR tree containing only `PKGBUILD` and `.SRCINFO` to `aur.archlinux.org`.
+
+For manual runs, `full_build` and `publish_current` let the workflow exercise the current package state even when there is no new upstream release. If the AUR tree already matches, the publish step exits cleanly without creating a new AUR commit.
 
 ## Manual usage
 
