@@ -46,6 +46,7 @@ The update workflow runs every 6 hours and through `workflow_dispatch`. Manual r
 
 - `full_build` to force a complete package build even when upstream is already current.
 - `publish_current` to attempt an AUR sync of the current `PKGBUILD` and `.SRCINFO` without waiting for a new upstream release.
+- The workflow uses Node 24-compatible GitHub Actions dependencies so scheduled runs do not rely on the deprecated Node 20 runner path.
 
 When a new upstream release is found, it:
 
