@@ -97,16 +97,25 @@ jobs:
 
       - name: Commit update to GitHub mirror
         if: steps.update.outputs.changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "$GITHUB_WORKSPACE" add PKGBUILD .SRCINFO
-          if git -C "$GITHUB_WORKSPACE" diff --cached --quiet; then
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          git clone --quiet "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$tmpdir"
+          cp "$GITHUB_WORKSPACE/PKGBUILD" "$tmpdir/PKGBUILD"
+          cp "$GITHUB_WORKSPACE/.SRCINFO" "$tmpdir/.SRCINFO"
+
+          git -C "$tmpdir" config user.name "github-actions[bot]"
+          git -C "$tmpdir" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$tmpdir" add PKGBUILD .SRCINFO
+          if git -C "$tmpdir" diff --cached --quiet; then
             echo "No GitHub mirror changes to commit."
             exit 0
           fi
-          git -C "$GITHUB_WORKSPACE" commit -m "chore: bump mani to ${{ steps.update.outputs.pkgver }}"
-          git -C "$GITHUB_WORKSPACE" push origin "HEAD:${GITHUB_REF_NAME}"
+          git -C "$tmpdir" commit -m "chore: bump mani to ${{ steps.update.outputs.pkgver }}"
+          git -C "$tmpdir" push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Configure AUR SSH
         if: steps.update.outputs.changed == 'true' || (github.event_name == 'workflow_dispatch' && inputs.publish_current)
